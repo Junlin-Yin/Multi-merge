@@ -2,7 +2,7 @@
 #include<thread>
 using namespace std;
 
-#define MAX_ITERATE	10
+#define MAXIMUM_ITERATE		10
 #define MAX(x,y)	((x) < (y)) ? (y) : (x);
 #define MIN(x,y)	((x) > (y)) ? (y) : (x);
 
@@ -12,6 +12,7 @@ int k;
 
 int search(const int* a, int na, int key);
 void split(int seg, int prev_ai, int prev_bj, int* ai, int* bj);
+void do_split(int seg, int prev_ai, int prev_bj, int na, const int* a, int nb, const int* b, int* ai, int* bj);
 void merge(const int* a, int na, const int* b, int nb, int* c);
 
 int main(void) {
@@ -48,14 +49,14 @@ int main(void) {
 	endlistB[k - 1] = nb;
 	
 	//For debug
-	for (int i = 0; i < k; i++) {
-		cout << endlistA[i] << " ";
-	}
-	cout << endl;
-	for (int i = 0; i < k; i++) {
-		cout << endlistB[i] << " ";
-	}
-	cout << endl;
+	//for (int i = 0; i < k; i++) {
+	//	cout << endlistA[i] << " ";
+	//}
+	//cout << endl;
+	//for (int i = 0; i < k; i++) {
+	//	cout << endlistB[i] << " ";
+	//}
+	//cout << endl;
 
 	//Merge each pair of segment using k threads
 	c = new int[na + nb];
@@ -72,6 +73,7 @@ int main(void) {
 		t[i].join();
 	}
 
+	//Output result
 	for (int i = 0; i < na + nb; i++) {
 		cout << c[i] << " ";
 	}
@@ -87,27 +89,32 @@ int main(void) {
 	return 0;
 }
 
-//Given a seg index, return the end indices of array a and b
-void split(int seg, int prev_ai, int prev_bj, int* ai, int* bj) {
-	int i, j, i_tmp, j_tmp;
+//Given two arrays and seg id, return the end indices of array a and b
+//Always ensure that a[prev_ai] < b[prev_bj]
+void do_split(int seg, int prev_ai, int prev_bj, int na, const int* a, int nb, const int* b, int* ai, int* bj) {
+	int i, j, i_tmp;
 	int m, n;
-	int cnt = MAX_ITERATE;
+	int cnt = MAXIMUM_ITERATE;
 	i = MAX(na * seg / k, prev_ai);			//Initial index of a
 	n = (na + nb) * seg / k;				//Ideal number of elements in the segment
+
+	//If array b runs out, we only need to adjust i
+	if (prev_bj == nb) {
+		*ai = MAX(n - nb, prev_ai);
+		*bj = prev_bj;
+		return;
+	}
+
 	while (true) {
-		if (i < na) {
-			//Find a[i] in b[], and work out the index j so that b[j-1] <= a[i] < b[j]
-			j = MAX(search(b, nb, a[i]) + 1, prev_bj);
-		}			
-		else {
-			//There is a great chance that b[0] > a[na-1]
+		if (cnt < MAXIMUM_ITERATE && i == na) {
+			//Often in this case, i will converge to na and j should be adjusted
 			j = MIN(n - i, nb);
 			j = MAX(j, prev_bj);
 		}
-		//Because a[i-1] <= a[i], we already guarantee that:
-		//1. b[j-1] <= a[i]
-		//2. a[i-1] < b[j]
-		//So each segment can be ripped clearly
+		else {
+			//Find a[i] in b[], and work out the index j so that b[j-1] <= a[i] < b[j]
+			j = MAX(search(b, nb, a[i]) + 1, prev_bj);
+		}
 
 		//If time is out, break to avoid infinite loop
 		if (--cnt < 0)
@@ -118,22 +125,33 @@ void split(int seg, int prev_ai, int prev_bj, int* ai, int* bj) {
 		//Assume we adjust the index of a so that m gets closer to n
 		i_tmp = MIN((i * n / m), na);
 		i_tmp = MAX(i_tmp, prev_ai);
-		j_tmp = j;
-		//If i remains stable, then we should adjust j instead
-		if (i_tmp == prev_ai) {
-			j_tmp = MIN(n - i_tmp, nb);
-			j_tmp = MAX(j_tmp, prev_bj);
-		}
 
 		//If the effect of the adjust is small enough, we can accept current i
 		if (i_tmp == i)
 			break;
 		//Iterate until m gets close enough to n
 		i = i_tmp;
-		j = j_tmp;
 	}
 	*ai = i;
 	*bj = j;
+	return;
+}
+
+//Given a seg index, return the end indices of array a and b
+void split(int seg, int prev_ai, int prev_bj, int* ai, int* bj) {
+	if (prev_ai == na) {
+		do_split(seg, prev_bj, prev_ai, nb, b, na, a, bj, ai);
+		return;
+	}
+	if (prev_bj == nb) {
+		do_split(seg, prev_ai, prev_bj, na, a, nb, b, ai, bj);
+		return;
+	}
+
+	if (a[prev_ai] <= b[prev_bj])
+		do_split(seg, prev_ai, prev_bj, na, a, nb, b, ai, bj);
+	else
+		do_split(seg, prev_bj, prev_ai, nb, b, na, a, bj, ai);
 	return;
 }
 
